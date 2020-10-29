@@ -3,6 +3,10 @@ BH_SCRIPT="/tmp/blocking_hosts.sh"
 BH_WHITELIST="/tmp/blocking_hosts.whitelist"
 logger "Download blocking hosts file and restart dnsmasq ..."
 
+# Create download script.
+cat > "$BH_SCRIPT" <<EOF
+#!/bin/sh
+
 # Function: wait_for_connection
 wait_for_connection() {
   # Wait for an Internet connection.
@@ -13,51 +17,6 @@ wait_for_connection() {
   done
 }
 
-# Function to download
-download_file(url, targetName) {
-  logger "Downloading \$url ..."
-  REPEAT=1
-  while :; do
-    # Wait for internet connection.
-    wait_for_connection
-    START_TIME=\`date +%s\`
-    # Create process to download a hosts file.
-    wget -O - "\$url" 2> /dev/null > "\${targetName}.tmp" &
-    WGET_PID=\$!
-    WAIT_TIME=\$((\$REPEAT * 10 + 20))
-    # Create timeout process.
-    ( sleep \$WAIT_TIME; kill -TERM \$WGET_PID ) &
-    TIMEOUT_PID=\$!
-    wait \$WGET_PID
-    CURRENT_RC=\$?
-    kill -KILL \$TIMEOUT_PID
-    STOP_TIME=\`date +%s\`
-    if [ \$CURRENT_RC = 0 ]; then
-      clean_hosts_file "\${targetName}.tmp" > "\targetName"
-      rm "\${targetName}.tmp"
-      break
-    fi
-    # In the case of an error: wait the remaining time.
-    TIME_SPAN=\$((\$STOP_TIME - \$START_TIME))
-    WAIT_TIME=\$((\$WAIT_TIME - \$TIME_SPAN))
-    [ \$WAIT_TIME -gt 0 ] && sleep \$WAIT_TIME
-    # Increase the number of repeats.
-    REPEAT=\$((\$REPEAT + 1))
-    [ \$REPEAT = 4 ] && break
-  done
-}
-
-# Create whitelist. The whitelist entries will be removed from the
-# hosts files, i.e. blacklist files.
-whitelistURL="https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/whitelist"
-download_file(${whitelistURL}, ${BH_WHITELIST})
-if [ -s "\$BH_WHITELIST" ]; then
-
-fi
-
-# Create download script.
-cat > "$BH_SCRIPT" <<EOF
-#!/bin/sh
 # Function: clean_hosts_file [file ...]
 clean_hosts_file() {
   # The sed script cleans up the file.
@@ -77,7 +36,7 @@ clean_hosts_file() {
   awk 'BEGIN {
          # Read whitelist file.
          n_whitelist = 0
-         while ( getline < "$BH_WHITELIST" ) {
+         while ( getline < "${BH_WHITELIST}" ) {
            if ( \$0 == "" ) {
              break
            }
@@ -85,7 +44,7 @@ clean_hosts_file() {
              a_whitelist[++n_whitelist] = \$0
            }
          }
-         close("$BH_WHITELIST")
+         close("${BH_WHITELIST}")
          # Setup record sparator.
          RS=" +"
          c = 0
@@ -124,6 +83,51 @@ clean_hosts_file() {
        }'
 }
 
+# Function to download
+download_file() {
+  url=\$1
+  targetName=\$2
+  cleanFlag=\$3
+  logger "Downloading \${url} to \${targetName} with cleanFlag \${cleanFlag} ..."
+  REPEAT=1
+  while :; do
+    # Wait for internet connection.
+    wait_for_connection
+    START_TIME=\`date +%s\`
+    # Create process to download a hosts file.
+    logger "wget -O - \${url} 2> /dev/null > \${targetName}.tmp"
+    wget -O - "\${url}" 2> /dev/null > "\${targetName}.tmp" &
+    WGET_PID=\$!
+    WAIT_TIME=\$((\$REPEAT * 10 + 20))
+    # Create timeout process.
+    ( sleep \$WAIT_TIME; kill -TERM \$WGET_PID ) &
+    TIMEOUT_PID=\$!
+    wait \$WGET_PID
+    CURRENT_RC=\$?
+    kill -KILL \$TIMEOUT_PID
+    STOP_TIME=\`date +%s\`
+    if [ \$CURRENT_RC = 0 ]; then
+      if [ \${cleanFlag} = 1 ]; then
+        clean_hosts_file "\${targetName}.tmp" > "\${targetName}"
+      else
+        cp "\${targetName}.tmp" "\${targetName}"
+      fi
+      rm "\${targetName}.tmp"
+      break
+    fi
+    # In the case of an error: wait the remaining time.
+    TIME_SPAN=\$((\$STOP_TIME - \$START_TIME))
+    WAIT_TIME=\$((\$WAIT_TIME - \$TIME_SPAN))
+    [ \$WAIT_TIME -gt 0 ] && sleep \$WAIT_TIME
+    # Increase the number of repeats.
+    REPEAT=\$((\$REPEAT + 1))
+    [ \$REPEAT = 4 ] && break
+  done
+}
+
+############################
+# actual start
+############################
 # Set lock file.
 LOCK_FILE="/tmp/blocking_hosts.lock"
 
@@ -132,7 +136,13 @@ if [ ! -f "\$LOCK_FILE" ]; then
   sleep \$((\$\$ % 5 + 5))
   [ -f "\$LOCK_FILE" ] && exit 0
   echo \$\$ > "\$LOCK_FILE"
+
   # Start downloading files.
+  # Create whitelist. The whitelist entries will be removed from the
+  # hosts files, i.e. blacklist files.
+  URL="https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/whitelist"
+  download_file \${URL} "${BH_WHITELIST}" 0
+
   HOSTS_FILE_NUMBER=1
   [ -d "/tmp/blocking_hosts" ] || mkdir "/tmp/blocking_hosts"
   for URL in "https://gitlab.com/ZeroDot1/CoinBlockerLists/-/raw/master/hosts" \\
@@ -145,7 +155,7 @@ if [ ! -f "\$LOCK_FILE" ]; then
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts" \\
             "https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/hosts"; do
     HOSTS_FILE="/tmp/blocking_hosts/hosts\`printf '%02d' \$HOSTS_FILE_NUMBER\`"
-    download_file($URL, $HOSTS_FILE)
+    download_file \${URL} \${HOSTS_FILE} 1
     HOSTS_FILE_NUMBER=\$((\$HOSTS_FILE_NUMBER + 1))
   done
 
@@ -161,8 +171,7 @@ if [ ! -f "\$LOCK_FILE" ]; then
     fi
   done
   if [ \$ANY_FILE_OK = 0 ]; then
-    logger "Restarting dnsmasq with additional hosts file(s) ..."
-    logger ${DNSMASQ_PARAM}
+    logger "Restarting dnsmasq with additional hosts file(s) ...\${DNSMASQ_PARAM}"
     killall -TERM dnsmasq
     dnsmasq --conf-file=/tmp/dnsmasq.conf \$DNSMASQ_PARAM &
   fi
