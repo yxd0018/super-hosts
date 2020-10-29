@@ -3,15 +3,57 @@ BH_SCRIPT="/tmp/blocking_hosts.sh"
 BH_WHITELIST="/tmp/blocking_hosts.whitelist"
 logger "Download blocking hosts file and restart dnsmasq ..."
 
+# Function: wait_for_connection
+wait_for_connection() {
+  # Wait for an Internet connection.
+  # This possibly could take a long time.
+  while :; do
+    ping -c 1 -w 10 www.freebsd.org > /dev/null 2>&1 && break
+    sleep 10
+  done
+}
+
+# Function to download
+download_file(url, targetName) {
+  logger "Downloading \$url ..."
+  REPEAT=1
+  while :; do
+    # Wait for internet connection.
+    wait_for_connection
+    START_TIME=\`date +%s\`
+    # Create process to download a hosts file.
+    wget -O - "\$url" 2> /dev/null > "\${targetName}.tmp" &
+    WGET_PID=\$!
+    WAIT_TIME=\$((\$REPEAT * 10 + 20))
+    # Create timeout process.
+    ( sleep \$WAIT_TIME; kill -TERM \$WGET_PID ) &
+    TIMEOUT_PID=\$!
+    wait \$WGET_PID
+    CURRENT_RC=\$?
+    kill -KILL \$TIMEOUT_PID
+    STOP_TIME=\`date +%s\`
+    if [ \$CURRENT_RC = 0 ]; then
+      clean_hosts_file "\${targetName}.tmp" > "\targetName"
+      rm "\${targetName}.tmp"
+      break
+    fi
+    # In the case of an error: wait the remaining time.
+    TIME_SPAN=\$((\$STOP_TIME - \$START_TIME))
+    WAIT_TIME=\$((\$WAIT_TIME - \$TIME_SPAN))
+    [ \$WAIT_TIME -gt 0 ] && sleep \$WAIT_TIME
+    # Increase the number of repeats.
+    REPEAT=\$((\$REPEAT + 1))
+    [ \$REPEAT = 4 ] && break
+  done
+}
+
 # Create whitelist. The whitelist entries will be removed from the
 # hosts files, i.e. blacklist files.
-cat > "$BH_WHITELIST" <<EOF
-localhost\\.localdomain
-local
-invalid
-whitelist-example\\.com
-.*\\.whitelist-example\\.com
-EOF
+whitelistURL="https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/whitelist"
+download_file(${whitelistURL}, ${BH_WHITELIST})
+if [ -s "\$BH_WHITELIST" ]; then
+
+fi
 
 # Create download script.
 cat > "$BH_SCRIPT" <<EOF
@@ -82,16 +124,6 @@ clean_hosts_file() {
        }'
 }
 
-# Function: wait_for_connection
-wait_for_connection() {
-  # Wait for an Internet connection.
-  # This possibly could take a long time.
-  while :; do
-    ping -c 1 -w 10 www.freebsd.org > /dev/null 2>&1 && break
-    sleep 10
-  done
-}
-
 # Set lock file.
 LOCK_FILE="/tmp/blocking_hosts.lock"
 
@@ -113,36 +145,7 @@ if [ ! -f "\$LOCK_FILE" ]; then
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts" \\
             "https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/hosts"; do
     HOSTS_FILE="/tmp/blocking_hosts/hosts\`printf '%02d' \$HOSTS_FILE_NUMBER\`"
-    logger "Downloading \$URL ..."
-    REPEAT=1
-    while :; do
-      # Wait for internet connection.
-      wait_for_connection
-      START_TIME=\`date +%s\`
-      # Create process to download a hosts file.
-      wget -O - "\$URL" 2> /dev/null > "\${HOSTS_FILE}.tmp" &
-      WGET_PID=\$!
-      WAIT_TIME=\$((\$REPEAT * 10 + 20))
-      # Create timeout process.
-      ( sleep \$WAIT_TIME; kill -TERM \$WGET_PID ) &
-      TIMEOUT_PID=\$!
-      wait \$WGET_PID
-      CURRENT_RC=\$?
-      kill -KILL \$TIMEOUT_PID
-      STOP_TIME=\`date +%s\`
-      if [ \$CURRENT_RC = 0 ]; then
-        clean_hosts_file "\${HOSTS_FILE}.tmp" > "\$HOSTS_FILE"
-        rm "\${HOSTS_FILE}.tmp"
-        break
-      fi
-      # In the case of an error: wait the remaining time.
-      TIME_SPAN=\$((\$STOP_TIME - \$START_TIME))
-      WAIT_TIME=\$((\$WAIT_TIME - \$TIME_SPAN))
-      [ \$WAIT_TIME -gt 0 ] && sleep \$WAIT_TIME
-      # Increase the number of repeats.
-      REPEAT=\$((\$REPEAT + 1))
-      [ \$REPEAT = 4 ] && break
-    done
+    download_file($URL, $HOSTS_FILE)
     HOSTS_FILE_NUMBER=\$((\$HOSTS_FILE_NUMBER + 1))
   done
 
