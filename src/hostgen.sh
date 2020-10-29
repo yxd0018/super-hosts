@@ -109,9 +109,9 @@ if [ ! -f "\$LOCK_FILE" ]; then
             "http://www.malwaredomainlist.com/hostslist/hosts.txt" \\
             "https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt" \\
             "https://someonewhocares.org/hosts/zero/hosts" \\
-            "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/anti-casino-and-betting-hosts-file.txt" \\
+            "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/Frellwits-Swedish-Hosts-File.txt" \\
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts" \\
-            "https://raw.githubusercontent.com/yxd0018/super-hosts/master/hosts"; do
+            "https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/hosts"; do
     HOSTS_FILE="/tmp/blocking_hosts/hosts\`printf '%02d' \$HOSTS_FILE_NUMBER\`"
     logger "Downloading \$URL ..."
     REPEAT=1
