@@ -182,8 +182,35 @@ EOF
 # Make it executeable.
 chmod 755 "$BH_SCRIPT"
 
+
+# skip as the dnsmasq setting is done manually to avoid eprom writing
 # Add crontab entry to execute script on 2nd day of Jan and July at 2am.
-grep -q "$BH_SCRIPT" /tmp/crontab || echo "0 2 2 Jan,Jul * root $BH_SCRIPT" >>/tmp/crontab
+# grep -q "$BH_SCRIPT" /tmp/crontab || echo "0 2 2 Jan,Jul * root $BH_SCRIPT" >>/tmp/crontab
+
+
+# port setting
+# 7000 admin
+# 7001 ssh
+# 7002 openvpn
+# 7003 openvpn admin
+# 7004 wireguard
+
+# VPN wireguard
+iptables -t nat -I POSTROUTING -o br0 -j SNAT --to $(nvram get lan_ipaddr)
+
+# openvpn
+iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -j MASQUERADE
+iptables -I FORWARD -p udp -s 10.8.0.0/24 -j ACCEPT
+iptables -I INPUT -p udp --dport=1194 -j ACCEPT
+iptables -I OUTPUT -p udp --sport=1194 -j ACCEPT
+
+iptables -I INPUT -p udp -i eth0 -j ACCEPT
+iptables -I FORWARD -i eth0 -o tun0 -j ACCEPT
+iptables -I FORWARD -i tun0 -o eth0 -j ACCEPT
+
+iptables -I INPUT -p udp -i br0 -j ACCEPT
+iptables -I FORWARD -i br0 -o tun0 -j ACCEPT
+iptables -I FORWARD -i tun0 -o br0 -j ACCEPT
 
 # Execute script in background.
 sh "$BH_SCRIPT" &
