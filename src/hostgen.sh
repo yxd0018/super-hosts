@@ -1,6 +1,10 @@
+# script to download host files from github repo into /tmp/blocking_hosts and clean them by whitelist setting.
+# Then create DNSMASQ setting.
+
 # --- COPY THE TEXT BELOW TO DD-WRT / ADMINISTRATION / COMMANDS then click SAVE FIREWALL ---
 BH_SCRIPT="/tmp/blocking_hosts.sh"
 BH_WHITELIST="/tmp/blocking_hosts.whitelist"
+SKIP_DOWNLOAD=0
 logger "Download blocking hosts file and restart dnsmasq ..."
 
 # Create download script.
@@ -125,40 +129,44 @@ download_file() {
   done
 }
 
-############################
-# actual start
-############################
-# Set lock file.
-LOCK_FILE="/tmp/blocking_hosts.lock"
+# Function: download and clean host files by whitelist
+download_clean_host_file() {
+  # Set lock file.
+  LOCK_FILE="/tmp/blocking_hosts.lock"
 
-# Check lock file.
-if [ ! -f "\$LOCK_FILE" ]; then
-  sleep \$((\$\$ % 5 + 5))
-  [ -f "\$LOCK_FILE" ] && exit 0
-  echo \$\$ > "\$LOCK_FILE"
+  # Check lock file.
+  if [ ! -f "\$LOCK_FILE" ]; then
+    sleep \$((\$\$ % 5 + 5))
+    [ -f "\$LOCK_FILE" ] && exit 0
+    echo \$\$ > "\$LOCK_FILE"
 
-  # Start downloading files.
-  # Create whitelist. The whitelist entries will be removed from the
-  # hosts files, i.e. blacklist files.
-  URL="https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/whitelist"
-  download_file \${URL} "${BH_WHITELIST}" 0
+    # Start downloading files.
+    # Create whitelist. The whitelist entries will be removed from the
+    # hosts files, i.e. blacklist files.
+    URL="https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/whitelist"
+    download_file \${URL} "${BH_WHITELIST}" 0
 
-  HOSTS_FILE_NUMBER=1
-  [ -d "/tmp/blocking_hosts" ] || mkdir "/tmp/blocking_hosts"
-  for URL in "https://gitlab.com/ZeroDot1/CoinBlockerLists/-/raw/master/hosts" \\
-            "https://gitlab.com/ZeroDot1/CoinBlockerLists/-/raw/master/hosts_optional" \\
-            "https://raw.githubusercontent.com/hoshsadiq/adblock-nocoin-list/master/hosts.txt" \\
-            "http://www.malwaredomainlist.com/hostslist/hosts.txt" \\
-            "https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt" \\
-            "https://someonewhocares.org/hosts/zero/hosts" \\
-            "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/Frellwits-Swedish-Hosts-File.txt" \\
-            "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts" \\
-            "https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/hosts"; do
-    HOSTS_FILE="/tmp/blocking_hosts/hosts\`printf '%02d' \$HOSTS_FILE_NUMBER\`"
-    download_file \${URL} \${HOSTS_FILE} 1
-    HOSTS_FILE_NUMBER=\$((\$HOSTS_FILE_NUMBER + 1))
-  done
+    HOSTS_FILE_NUMBER=1
+    [ -d "/tmp/blocking_hosts" ] || mkdir "/tmp/blocking_hosts"
+    for URL in "https://gitlab.com/ZeroDot1/CoinBlockerLists/-/raw/master/hosts" \\
+              "https://gitlab.com/ZeroDot1/CoinBlockerLists/-/raw/master/hosts_optional" \\
+              "https://raw.githubusercontent.com/hoshsadiq/adblock-nocoin-list/master/hosts.txt" \\
+              "http://www.malwaredomainlist.com/hostslist/hosts.txt" \\
+              "https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt" \\
+              "https://someonewhocares.org/hosts/zero/hosts" \\
+              "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/Frellwits-Swedish-Hosts-File.txt" \\
+              "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts" \\
+              "https://raw.githubusercontent.com/yxd0018/super-hosts/master/src/hosts"; do
+      HOSTS_FILE="/tmp/blocking_hosts/hosts\`printf '%02d' \$HOSTS_FILE_NUMBER\`"
+      download_file \${URL} \${HOSTS_FILE} 1
+      HOSTS_FILE_NUMBER=\$((\$HOSTS_FILE_NUMBER + 1))
+    done
+    rm "\$LOCK_FILE"
+  fi
+}
 
+# Function: create DNSMASQ setting
+create_filter() {
   # Inspect downloaded hosts files.
   ANY_FILE_OK=1
   DNSMASQ_PARAM=""
@@ -175,8 +183,17 @@ if [ ! -f "\$LOCK_FILE" ]; then
     killall -TERM dnsmasq
     dnsmasq --conf-file=/tmp/dnsmasq.conf \$DNSMASQ_PARAM &
   fi
-  rm "\$LOCK_FILE"
-fi
+}
+
+############################
+# actual start
+############################
+
+if [ \${SKIP_DOWNLOAD} = 0 ]; then
+  download_clean_host_file
+
+create_filter
+
 EOF
 
 # Make it executeable.
