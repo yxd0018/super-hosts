@@ -8,7 +8,7 @@ Click button "SAVE FIREWALL" to wipe out firewall setting and execute script. If
 
 The script will generate temporary script /tmp/blocking_hosts.sh.  Host list (black and white) in folder /tmp/blocking_hosts while cron job in /tmp/crontab.
 
-The script takes 1hr to run and you can see watch files growing in the folder /tmp/blocking_hosts. So be patient. 
+Flag skip_download in the script hostgen.sh (as well as resulting script blocking_hosts.sh) will decide if it redownload the host files again. By default it will skip download. The download takes 1hr and you can see watch files growing in the folder /tmp/blocking_hosts. So be patient.
 
 You can save the commands in the "Commands" dialog box to /tmp/custom.sh. You can execute this custom script by typing `sh /tmp/custom.sh` (without quotation marks) in the Commands box and clicking on “Run Commands” at the bottom of the page. 
 

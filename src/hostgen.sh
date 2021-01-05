@@ -4,7 +4,7 @@
 # --- COPY THE TEXT BELOW TO DD-WRT / ADMINISTRATION / COMMANDS then click SAVE FIREWALL ---
 BH_SCRIPT="/tmp/blocking_hosts.sh"
 BH_WHITELIST="/tmp/blocking_hosts.whitelist"
-SKIP_DOWNLOAD=0
+SKIP_DOWNLOAD=1
 logger "Download blocking hosts file and restart dnsmasq ..."
 
 # Create download script.
@@ -188,10 +188,10 @@ create_filter() {
 ############################
 # actual start
 ############################
-
-if [ \${SKIP_DOWNLOAD} = 0 ]; then
+skipDownload = \${SKIP_DOWNLOAD}
+if [ skipDownlaod == 0 ]; then
   download_clean_host_file
-
+fi
 create_filter
 
 EOF
