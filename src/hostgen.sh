@@ -4,12 +4,13 @@
 # --- COPY THE TEXT BELOW TO DD-WRT / ADMINISTRATION / COMMANDS then click SAVE FIREWALL ---
 BH_SCRIPT="/tmp/blocking_hosts.sh"
 BH_WHITELIST="/tmp/blocking_hosts.whitelist"
-SKIP_DOWNLOAD=1
 logger "Download blocking hosts file and restart dnsmasq ..."
 
 # Create download script.
 cat > "$BH_SCRIPT" <<EOF
 #!/bin/sh
+
+skipDownload=1
 
 # Function: wait_for_connection
 wait_for_connection() {
@@ -188,9 +189,11 @@ create_filter() {
 ############################
 # actual start
 ############################
-skipDownload = \${SKIP_DOWNLOAD}
-if [ skipDownlaod == 0 ]; then
-  download_clean_host_file
+if [ ${skipDownlaod} == 0 ]; then
+   echo "download again"
+#  download_clean_host_file
+else
+   echo "skip download"
 fi
 create_filter
 
